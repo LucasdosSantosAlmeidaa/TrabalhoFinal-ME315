@@ -1,0 +1,2873 @@
+---
+title: "Visualização de Dados: Do Caos à Clareza"
+subtitle: "Tutorial Completo com Datasets Financeiros Reais do Kaggle"
+author: "Workshop de Visualização"
+format:
+  revealjs:
+    theme: dark
+    transition: slide
+    slide-number: true
+    chalkboard: true
+    code-fold: false
+    code-line-numbers: true
+    incremental: false
+---
+
+## 🎯 Objetivo da Apresentação
+
+::: {.incremental}
+- Mostrar **como NÃO fazer** visualizações
+- Corrigir passo a passo aplicando **boas práticas**
+- Comparar implementação em **Python e R** (rodando dentro de Julia!)
+- Entender **quando usar cada tipo de gráfico**
+- Análise completa de portfolio financeiro
+:::
+
+::: {.callout-note}
+**Datasets Kaggle utilizados:**
+
+- [Price-Volume Data for All US Stocks & ETFs](https://www.kaggle.com/datasets/borismarjanovic/price-volume-data-for-all-us-stocks-etfs)
+- [Yahoo Stock Market Data](https://www.kaggle.com/datasets/zusmani/yahoo-stock-market-data)
+:::
+
+---
+
+## 📦 Setup Inicial
+
+```{julia}
+#| echo: true
+#| output: false
+#| warning: false
+
+using Pkg
+
+# Instalar pacotes necessários (descomentar na primeira vez)
+Pkg.add(["CSV", "DataFrames", "Plots", "StatsPlots", "Statistics", "Distributions", "GLM", "Dates", "StatsBase", "PyCall", "RCall"])
+
+using CSV, DataFrames, Plots, StatsPlots, Statistics
+using Distributions, GLM, Dates, StatsBase
+using PyCall, RCall
+
+# Configurar Python e R
+ENV["PYTHON"] = "" # usar conda python
+Pkg.build("PyCall")
+
+println("✅ Pacotes carregados com sucesso!")
+```
+
+---
+
+## 📊 Tipos de Variáveis → Tipos de Gráficos
+
+| Variáveis | Gráfico Recomendado | Quando Usar |
+|-----------|---------------------|-------------|
+| 1 Quantitativa | Histograma, Densidade, Boxplot | Distribuição |
+| 1 Categórica | Barras | Frequências |
+| 2 Quantitativas | Scatter, Hexbin | Relação/Correlação |
+| 1 Quant + 1 Cat | Boxplot/Violin por grupo | Comparar grupos |
+| Temporal | Linha, Área | Evolução no tempo |
+| Correlação múltipla | Heatmap | Matriz de correlação |
+
+---
+
+## 😱 PARTE 1: O Gráfico do Inferno (JULIA)
+
+**Tudo que pode dar errado em um scatter plot**
+
+```{julia}
+#| echo: true
+#| output: true
+#| warning: false
+
+# Carregar dados
+try
+    global df = CSV.read("apple_stock.csv", DataFrame)
+catch e
+    println("⚠️  Usando dados sintéticos (arquivo não encontrado)")
+    global df = DataFrame(
+        Volume = rand(1e6:1e8, 1000),
+        Close = rand(50:200, 1000) .+ randn(1000) .* 10
+    )
+end
+
+# ❌ O PIOR GRÁFICO POSSÍVEL
+scatter(df.Volume, df.Close,
+    title="graf",  # ❌ Título não informativo
+    xlabel="x",    # ❌ Sem contexto
+    ylabel="y",    # ❌ Sem unidades
+    color=:rainbow,  # ❌ Cores aleatórias
+    markersize=rand(1:20, length(df.Volume)),  # ❌ Tamanhos variados
+    alpha=1.0,     # ❌ Sem transparência
+    legend=false,
+    grid=false,    # ❌ Sem grid
+    background_color=:yellow,  # ❌ Fundo horrível
+    foreground_color=:red,     # ❌ Texto ilegível
+    titlefontsize=8,  # ❌ Fonte minúscula
+    tickfontsize=5,   # ❌ Números ilegíveis
+    size=(400, 300))  # ❌ Muito pequeno
+savefig("julia_helll.png")
+```
+---
+
+## Gráfico gerado pelo Julia
+
+<center>
+<img src="julia_helll.png" style="width: 80%;">
+</center>
+
+---
+
+## 😱 Mesmo Gráfico em PYTHON (rodando no Julia!)
+
+```{julia}
+#| echo: true
+#| output: true
+#| warning: false
+
+using PyCall
+
+# Rodar Python dentro do Julia usando PyCall
+py"""
+import pandas as pd
+import matplotlib.pyplot as plt
+import numpy as np
+import matplotlib
+matplotlib.use('Agg')  # Backend não-interativo
+
+# Carregar dados
+try:
+    df = pd.read_csv('apple_stock.csv')
+except:
+    df = pd.DataFrame({
+        'Volume': np.random.randint(1e6, 1e8, 1000),
+        'Close': np.random.randint(50, 200, 1000) + np.random.randn(1000) * 10
+    })
+
+# ❌ O PIOR GRÁFICO POSSÍVEL
+fig, ax = plt.subplots(figsize=(4, 3), dpi=50)
+colors = plt.cm.rainbow(np.linspace(0, 1, len(df)))
+sizes = np.random.randint(1, 20, size=len(df))
+ax.scatter(df['Volume'], df['Close'], c=colors, s=sizes, alpha=1.0)
+ax.set_title('graf', fontsize=8, color='red')
+ax.set_xlabel('x', fontsize=5)
+ax.set_ylabel('y', fontsize=5)
+ax.set_facecolor('yellow')
+ax.grid(False)
+ax.tick_params(labelsize=5)
+plt.tight_layout()
+plt.savefig('python_hell.png', dpi=50)
+plt.close()
+"""
+
+println("✅ Gráfico Python gerado!")
+```
+---
+
+## Gráfico gerado pelo Python
+
+<center>
+<img src="python_hell.png" style="width: 80%;">
+</center>
+
+---
+
+## 😱 Mesmo Gráfico em R (rodando no Julia!)
+
+```{julia}
+#| echo: true
+#| output: true
+#| warning: false
+
+Pkg.build("RCall")
+current_dir = pwd()
+println("📁 Diretório atual: ", current_dir)
+# Rodar R dentro do Julia usando RCall
+R"""
+library(ggplot2)
+
+# Carregar dados
+tryCatch({
+  df <- read.csv('apple_stock.csv')
+}, error = function(e) {
+  df <<- data.frame(
+    Volume = sample(1e6:1e8, 1000, replace = TRUE),
+    Close = sample(50:200, 1000, replace = TRUE) + rnorm(1000) * 10
+  )
+})
+
+df$color_id <- 1:nrow(df)
+df$size_random <- sample(1:20, nrow(df), replace = TRUE)
+
+# ❌ O PIOR GRÁFICO POSSÍVEL
+p <- ggplot(df, aes(x = Volume, y = Close)) +
+  geom_point(aes(color = color_id, size = size_random), alpha = 1.0) +
+  scale_color_gradientn(colors = rainbow(100)) +
+  labs(title = 'graf', x = 'x', y = 'y') +
+  theme(
+    plot.background = element_rect(fill = 'yellow'),
+    panel.background = element_rect(fill = 'yellow'),
+    panel.grid = element_blank(),
+    axis.text = element_text(size = 5, color = 'red'),
+    plot.title = element_text(size = 8, color = 'red'),
+    legend.position = 'none'
+  )
+
+ggsave('r_hell.png', p, width = 4, height = 3, dpi = 50)
+"""
+
+# Exibir a imagem gerada
+try
+    display("image/png", read("r_hell.png"))
+    println("✅ Gráfico R gerado!")
+catch
+    println("⚠️  RCall não configurado. Instale com: Pkg.build(\"RCall\")")
+end
+```
+---
+
+## Gráfico gerado pelo R
+
+<center>
+<img src="r_hell.png" style="width: 80%;">
+</center>
+
+---
+
+## 💡 Comparação Visual: 3 Linguagens, 1 Gráfico Horrível
+
+::: {layout-ncol=3}
+![Julia](julia_helll.png){width=1100}
+
+![Python](python_hell.png){width=1100}
+
+![R](r_hell.png){width=1100}
+:::
+
+**Todos igualmente ruins! 😱**
+
+---
+
+## ✅ CORREÇÃO 1: Títulos e Labels (JULIA)
+
+```{julia}
+#| echo: true
+#| output: true
+#| warning: false
+
+using CSV, DataFrames, Plots
+
+# Carregar dados
+try
+    global df = CSV.read("apple_stock.csv", DataFrame)
+catch e
+    println("⚠️  Usando dados sintéticos (arquivo não encontrado)")
+    global df = DataFrame(
+        Volume = rand(1_000_000:100_000_000, 1000),
+        Close = rand(50:200, 1000) .+ randn(1000) .* 10
+    )
+end
+
+# ✅ MELHORIA: Título e eixos descritivos
+scatter(df.Volume, df.Close,
+    title="AAPL - Relação entre Volume e Preço de Fechamento",  # ✅
+    xlabel="Volume Negociado (unidades)",  # ✅
+    ylabel="Preço de Fechamento (USD)",  # ✅
+    color=:rainbow,  # Ainda ruim, mas vamos corrigir depois
+    markersize=rand(1:20, length(df.Volume)),
+    alpha=1.0,
+    legend=false,
+    grid=false,
+    background_color=:yellow,
+    foreground_color=:red,
+    titlefontsize=8,
+    tickfontsize=5,
+    size=(400, 300))
+savefig("julia_v1.png")
+```
+---
+
+## Gráfico Julia - versão 1
+
+<center>
+<img src="julia_v1.png" style="width: 80%;">
+</center>
+---
+
+## ✅ CORREÇÃO 1: Títulos e Labels (PYTHON)
+
+```{julia}
+#| echo: true
+#| output: true
+#| warning: false
+
+using PyCall
+
+py"""
+import pandas as pd
+import matplotlib.pyplot as plt
+import numpy as np
+import matplotlib
+matplotlib.use('Agg')
+
+# Recarregar dados (Python precisa do próprio df)
+try:
+    df = pd.read_csv('apple_stock.csv')
+except:
+    df = pd.DataFrame({
+        'Volume': np.random.randint(1e6, 1e8, 1000),
+        'Close': np.random.randint(50, 200, 1000) + np.random.randn(1000) * 10
+    })
+
+fig, ax = plt.subplots(figsize=(4, 3), dpi=50)
+colors = plt.cm.rainbow(np.linspace(0, 1, len(df)))
+sizes = np.random.randint(1, 20, size=len(df))
+ax.scatter(df['Volume'], df['Close'], c=colors, s=sizes, alpha=1.0)
+
+# ✅ MELHORIAS
+ax.set_title('AAPL - Relação entre Volume e Preço de Fechamento', fontsize=8, color='red')
+ax.set_xlabel('Volume Negociado (unidades)', fontsize=5)
+ax.set_ylabel('Preço de Fechamento (USD)', fontsize=5)
+ax.set_facecolor('yellow')
+ax.grid(False)
+ax.tick_params(labelsize=5)
+plt.tight_layout()
+plt.savefig('python_v1.png', dpi=50)
+plt.close()
+"""
+
+# Verificar
+if isfile("python_v1.png")
+    println("✅ Gráfico Python v1 gerado!")
+else
+    println("❌ Arquivo não criado")
+end
+```
+---
+
+## Gráfico Python - versão 1
+
+<center>
+<img src="python_v1.png" style="width: 80%;">
+</center>
+---
+
+## ✅ CORREÇÃO 1: Títulos e Labels (R)
+
+```{julia}
+#| echo: true
+#| output: true
+#| warning: false
+
+using RCall
+
+R"""
+library(ggplot2)
+
+# Recarregar dados no R - CORREÇÃO: garantir que df sempre existe
+df <- NULL
+tryCatch({
+  df <- read.csv('apple_stock.csv')
+}, error = function(e) {
+  df <<- data.frame(
+    Volume = sample(1e6:1e8, 1000, replace = TRUE),
+    Close = sample(50:200, 1000, replace = TRUE) + rnorm(1000) * 10
+  )
+})
+
+# Se df ainda for NULL, criar dados sintéticos
+if (is.null(df)) {
+  df <- data.frame(
+    Volume = sample(1e6:1e8, 1000, replace = TRUE),
+    Close = sample(50:200, 1000, replace = TRUE) + rnorm(1000) * 10
+  )
+}
+
+df$color_id <- 1:nrow(df)
+df$size_random <- sample(1:20, nrow(df), replace = TRUE)
+
+p <- ggplot(df, aes(x = Volume, y = Close)) +
+  geom_point(aes(color = color_id, size = size_random), alpha = 1.0) +
+  scale_color_gradientn(colors = rainbow(100)) +
+  # ✅ MELHORIAS
+  labs(title = 'AAPL - Relação entre Volume e Preço de Fechamento',
+       x = 'Volume Negociado (unidades)',
+       y = 'Preço de Fechamento (USD)') +
+  theme(
+    plot.background = element_rect(fill = 'yellow'),
+    panel.background = element_rect(fill = 'yellow'),
+    panel.grid = element_blank(),
+    axis.text = element_text(size = 5, color = 'red'),
+    plot.title = element_text(size = 8, color = 'red'),
+    legend.position = 'none'
+  )
+
+ggsave('r_v1.png', p, width = 4, height = 3, dpi = 50)
+"""
+
+# Verificar
+if isfile("r_v1.png")
+    println("✅ Gráfico R v1 gerado!")
+else
+    println("❌ Arquivo não criado")
+end
+```
+---
+
+## Gráfico R - versão 1
+
+<center>
+<img src="r_v1.png" style="width: 80%;">
+</center>
+---
+
+## ✅ CORREÇÃO 2: Cores com Propósito  (Python)
+
+```{julia}
+#| echo: true
+#| output: true
+using PyCall
+
+py"""
+import pandas as pd
+import matplotlib.pyplot as plt
+import numpy as np
+import matplotlib
+matplotlib.use('Agg')
+
+# Recarregar dados
+try:
+    df = pd.read_csv('apple_stock.csv')
+except:
+    df = pd.DataFrame({
+        'Volume': np.random.randint(1e6, 1e8, 1000),
+        'Close': np.random.randint(50, 200, 1000) + np.random.randn(1000) * 10
+    })
+
+fig, ax = plt.subplots(figsize=(4, 3), dpi=50)
+sizes = np.random.randint(1, 20, size=len(df))
+
+# ✅ Cor consistente
+ax.scatter(df['Volume'], df['Close'], c='steelblue', s=sizes, alpha=1.0)
+ax.set_title('AAPL - Relação entre Volume e Preço de Fechamento', 
+             fontsize=8, color='red')
+ax.set_xlabel('Volume Negociado (unidades)', fontsize=5)
+ax.set_ylabel('Preço de Fechamento (USD)', fontsize=5)
+ax.set_facecolor('yellow')
+ax.grid(False)
+ax.tick_params(labelsize=5)
+plt.tight_layout()
+plt.savefig('python_v2.png', dpi=50)
+plt.close()
+"""
+
+# Verificar
+if isfile("python_v2.png")
+    println("✅ Gráfico Python v2 gerado!")
+else
+    println("❌ Arquivo não criado")
+end
+```
+---
+
+## Gráfico Python - versão 2
+
+<center>
+<img src="python_v2.png" style="width: 80%;">
+</center>
+---
+
+## ✅ CORREÇÃO 2: Cores com Propósito (R)
+
+```{julia}
+#| echo: true
+#| output: true
+#| warning: false
+
+using RCall
+
+R"""
+library(ggplot2)
+
+# Recarregar dados
+tryCatch({
+  df <- read.csv('apple_stock.csv')
+}, error = function(e) {
+  df <<- data.frame(
+    Volume = sample(1e6:1e8, 1000, replace = TRUE),
+    Close = sample(50:200, 1000, replace = TRUE) + rnorm(1000) * 10
+  )
+})
+
+df$size_random <- sample(1:20, nrow(df), replace = TRUE)
+
+p <- ggplot(df, aes(x = Volume, y = Close)) +
+  # ✅ Cor consistente
+  geom_point(aes(size = size_random), color = 'steelblue', alpha = 1.0) +
+  labs(title = 'AAPL - Relação entre Volume e Preço de Fechamento',
+       x = 'Volume Negociado (unidades)',
+       y = 'Preço de Fechamento (USD)') +
+  theme(
+    plot.background = element_rect(fill = 'yellow'),
+    panel.background = element_rect(fill = 'yellow'),
+    panel.grid = element_blank(),
+    axis.text = element_text(size = 5, color = 'red'),
+    plot.title = element_text(size = 8, color = 'red'),
+    legend.position = 'none'
+  )
+
+ggsave('r_v2.png', p, width = 4, height = 3, dpi = 50)
+"""
+
+# Verificar
+if isfile("r_v2.png")
+    println("✅ Gráfico R v2 gerado!")
+else
+    println("❌ Arquivo não criado")
+end
+```
+---
+
+## Gráfico R - versão 2
+
+<center>
+<img src="r_v2.png" style="width: 80%;">
+</center>
+---
+
+## ✅ CORREÇÃO 3: Transparência e Tamanho (JULIA)
+
+```{julia}
+#| echo: true
+#| output: true
+
+scatter(df.Volume, df.Close,
+    title="AAPL - Relação entre Volume e Preço de Fechamento",
+    xlabel="Volume Negociado (unidades)",
+    ylabel="Preço de Fechamento (USD)",
+    color=:steelblue,
+    markersize=4,  # ✅ Tamanho consistente
+    alpha=0.5,     # ✅ Transparência
+    legend=false,
+    grid=false,
+    background_color=:yellow,
+    foreground_color=:red,
+    titlefontsize=8,
+    tickfontsize=5,
+    size=(400, 300))
+```
+
+---
+
+## ✅ CORREÇÃO FINAL: Gráfico Perfeito (JULIA)
+
+```{julia}
+#| echo: true
+#| output: true
+
+# Limpar dados
+df_clean = dropmissing(df[!, [:Close, :Volume]])
+df_clean = df_clean[df_clean.Volume .> 0, :]
+df_sample = last(df_clean, 500)
+
+# 🎉 GRÁFICO PERFEITO
+scatter(df_sample.Volume, df_sample.Close,
+    title="AAPL - Relação entre Volume e Preço de Fechamento",
+    xlabel="Volume Negociado (unidades)",
+    ylabel="Preço de Fechamento (USD)",
+    color=:steelblue,     # ✅
+    markersize=4,         # ✅
+    alpha=0.6,            # ✅
+    legend=false,
+    grid=true,            # ✅
+    background_color=:white,  # ✅
+    foreground_color=:black,  # ✅
+    titlefontsize=14,     # ✅
+    tickfontsize=10,      # ✅
+    guidefontsize=12,     # ✅
+    size=(1000, 700),     # ✅
+    dpi=300)              # ✅
+savefig("julia_final.png")
+```
+---
+
+## Gráfico Julia - Versão Final (perfeita)
+
+<center>
+<img src="julia_final.png" style="width: 80%;">
+</center>
+---
+
+## ✅ CORREÇÃO FINAL: Gráfico Perfeito (PYTHON)
+
+```{julia}
+#| echo: true
+#| output: true
+#| warning: false
+
+using PyCall
+
+py"""
+import pandas as pd
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+import numpy as np
+
+# Recarregar dados
+try:
+    df = pd.read_csv('apple_stock.csv')
+except:
+    df = pd.DataFrame({
+        'Volume': np.random.randint(1e6, 1e8, 1000),
+        'Close': np.random.randint(50, 200, 1000) + np.random.randn(1000) * 10
+    })
+
+# Limpar dados
+df_clean = df.dropna(subset=['Close', 'Volume'])
+df_clean = df_clean[df_clean['Volume'] > 0].tail(500)
+
+# 🎉 GRÁFICO PERFEITO
+fig, ax = plt.subplots(figsize=(10, 7), dpi=300)
+ax.scatter(df_clean['Volume'], df_clean['Close'], 
+           c='steelblue', s=16, alpha=0.6)
+ax.set_title('AAPL - Relação entre Volume e Preço de Fechamento', fontsize=14)
+ax.set_xlabel('Volume Negociado (unidades)', fontsize=12)
+ax.set_ylabel('Preço de Fechamento (USD)', fontsize=12)
+ax.set_facecolor('white')
+ax.grid(True, alpha=0.3)
+ax.tick_params(labelsize=10)
+plt.tight_layout()
+plt.savefig('python_final.png', dpi=300, bbox_inches='tight')
+plt.close()
+"""
+
+# Verificar
+if isfile("python_final.png")
+    println("✅ Gráfico Python perfeito gerado!")
+else
+    println("❌ Arquivo não criado")
+end
+```
+---
+
+## Gráfico Python - Versão Final (perfeita)
+
+<center>
+<img src="python_final.png" style="width: 80%;">
+</center>
+---
+
+
+## ✅ CORREÇÃO FINAL: Gráfico Perfeito (R)
+
+```{julia}
+#| echo: true
+#| output: true
+#| warning: false
+
+using RCall
+
+R"""
+library(ggplot2)
+
+# Recarregar dados
+tryCatch({
+  df <- read.csv('apple_stock.csv')
+}, error = function(e) {
+  df <- data.frame(
+    Volume = sample(1e6:1e8, 1000, replace = TRUE),
+    Close = sample(50:200, 1000, replace = TRUE) + rnorm(1000) * 10
+  )
+})
+
+# Limpar dados
+df_clean <- df[!is.na(df$Volume) & !is.na(df$Close) & df$Volume > 0, ]
+df_clean <- tail(df_clean, 500)
+
+# 🎉 GRÁFICO PERFEITO
+p <- ggplot(df_clean, aes(x = Volume, y = Close)) +
+  geom_point(color = 'steelblue', size = 2, alpha = 0.6) +
+  labs(title = 'AAPL - Relação entre Volume e Preço de Fechamento',
+       x = 'Volume Negociado (unidades)',
+       y = 'Preço de Fechamento (USD)') +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 14, hjust = 0.5),
+    axis.title = element_text(size = 12),
+    axis.text = element_text(size = 10),
+    panel.grid.major = element_line(color = 'gray80', linewidth = 0.5),  # ✅ Corrigido
+    panel.grid.minor = element_blank(),
+    plot.background = element_rect(fill = 'white', color = NA),
+    panel.background = element_rect(fill = 'white')
+  )
+
+ggsave('r_final.png', p, width = 10, height = 7, dpi = 300)
+"""
+
+# Verificar
+if isfile("r_final.png")
+    println("✅ Gráfico R perfeito gerado!")
+else
+    println("❌ Arquivo não criado")
+end
+```
+---
+
+## Gráfico R - Versão Final (perfeita)
+
+<center>
+<img src="r_final.png" style="width: 80%;">
+</center>
+---
+
+## 🎨 Checklist de Boas Práticas
+
+::: {.incremental}
+✅ **Título descritivo**: O que, onde, quando  
+✅ **Eixos claros**: Variável + unidade  
+✅ **Cores com propósito**: Máx 3-5 cores  
+✅ **Transparência**: Para ver sobreposições  
+✅ **Tamanho adequado**: Mín 800x600px  
+✅ **Fonte legível**: Mín 10pt  
+✅ **Grid**: Facilita leitura  
+✅ **Fundo neutro**: Branco ou cinza claro  
+✅ **Alta resolução**: DPI ≥ 300  
+:::
+
+---
+
+## 🎯 Próximos Slides
+
+Nos próximos slides veremos:
+
+1. **Regressão Linear** (2 quantitativas)
+2. **Distribuições** (1 quantitativa)
+3. **Boxplot/Violin** (1 quant + 1 cat)
+4. **Correlação** (heatmap)
+5. **Séries Temporais** (temporal)
+6. **Diagnóstico de Modelos**
+7. **Dashboard EDA Completo**
+
+Sempre comparando **Julia, Python e R**!
+
+---
+
+
+::: {.callout-tip}
+## Continue Explorando
+Os próximos slides têm análises completas com os 3 ambientes rodando em paralelo!
+:::
+:::
+
+
+## 🐍 Python: Regressão Linear
+
+```{julia}
+#| echo: true
+#| output: true
+#| eval: true
+using PyCall
+
+println("🐍 Regressão Python com apple_stock.csv...\n")
+
+py"""
+import pandas as pd
+import numpy as np
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+import os
+
+# Carregar arquivo apple_stock.csv
+if not os.path.exists('apple_stock.csv'):
+    raise FileNotFoundError("❌ Arquivo 'apple_stock.csv' não encontrado!")
+
+df = pd.read_csv('apple_stock.csv')
+print(f"✅ apple_stock.csv carregado")
+print(f"   Colunas: {list(df.columns)}")
+print(f"   Linhas: {len(df)}")
+
+# Limpar
+df = df.dropna(subset=['Close', 'Volume'])
+df = df[df['Volume'] > 0].tail(500)
+
+x = df['Volume'].values
+y = df['Close'].values
+
+print(f"📈 {len(df)} registros após limpeza")
+print(f"   Volume: {x.min():.0f} - {x.max():.0f}")
+print(f"   Close: {y.min():.2f} - {y.max():.2f}\n")
+
+# REGRESSÃO LINEAR MANUAL
+n = len(x)
+x_mean = np.mean(x)
+y_mean = np.mean(y)
+
+# Calcular slope (b) e intercept (a)
+numerator = np.sum((x - x_mean) * (y - y_mean))
+denominator = np.sum((x - x_mean) ** 2)
+slope = numerator / denominator
+intercept = y_mean - slope * x_mean
+
+# R²
+y_pred = slope * x + intercept
+ss_res = np.sum((y - y_pred) ** 2)
+ss_tot = np.sum((y - y_mean) ** 2)
+r_squared = 1 - (ss_res / ss_tot)
+
+print(f"📊 Slope: {slope:.2e}")
+print(f"📊 Intercept: {intercept:.2f}")
+print(f"📊 R²: {r_squared:.4f}\n")
+
+# GRÁFICO
+fig, ax = plt.subplots(figsize=(10, 7), dpi=150)
+
+# Scatter
+ax.scatter(x, y, alpha=0.6, color='steelblue', s=20, label='Dados')
+
+# Linha de regressão
+x_line = np.linspace(x.min(), x.max(), 100)
+y_line = slope * x_line + intercept
+ax.plot(x_line, y_line, color='red', linewidth=3, label='Regressão')
+
+# Títulos
+ax.set_title('Regressão Linear: Preço vs Volume (PYTHON)', 
+             fontsize=14, fontweight='bold')
+ax.set_xlabel('Volume Negociado', fontsize=12)
+ax.set_ylabel('Preço Fechamento (USD)', fontsize=12)
+ax.grid(True, alpha=0.3, linestyle='--')
+ax.legend()
+
+# Texto
+text = f'y = {intercept:.2f} + {slope:.2e}×Volume\\nR² = {r_squared:.4f}'
+ax.text(0.05, 0.95, text,
+        transform=ax.transAxes,
+        fontsize=11,
+        verticalalignment='top',
+        bbox=dict(boxstyle='round', facecolor='white', alpha=0.9),
+        color='red',
+        fontweight='bold')
+
+plt.tight_layout()
+plt.savefig('slide3_python_regression.png', dpi=150, bbox_inches='tight')
+print("✅ slide3_python_regression.png")
+plt.close()
+"""
+
+if isfile("slide3_python_regression.png")
+    println("\n✅ SUCESSO!")
+else
+    println("\n❌ Falhou")
+end
+```
+---
+
+## Python - Regressão Linear
+
+<center>
+<img src="slide3_python_regression.png" style="width: 80%;">
+</center>
+---
+
+## 📈 R: Regressão Linear
+
+```{julia}
+#| echo: true
+#| output: true
+#| eval: true
+
+using RCall
+
+println("📊 Executando R com apple_stock.csv...\n")
+
+R"""
+library(ggplot2)
+
+# Carregar arquivo apple_stock.csv
+if (!file.exists('apple_stock.csv')) {
+  stop("❌ Arquivo 'apple_stock.csv' não encontrado!")
+}
+
+df <- read.csv('apple_stock.csv')
+cat("✅ apple_stock.csv carregado\n")
+cat("   Colunas:", paste(names(df), collapse=", "), "\n")
+cat("   Linhas:", nrow(df), "\n")
+
+# Limpar dados
+df <- na.omit(df[, c('Close', 'Volume')])
+df <- df[df$Volume > 0, ]
+df <- tail(df, 500)
+
+cat("📈", nrow(df), "registros após limpeza\n")
+cat("   Volume:", format(min(df$Volume), scientific=FALSE), "-", 
+    format(max(df$Volume), scientific=FALSE), "\n")
+cat("   Close:", round(min(df$Close), 2), "-", round(max(df$Close), 2), "\n\n")
+
+# Calcular regressão
+model <- lm(Close ~ Volume, data=df)
+r2 <- summary(model)$r.squared
+coefs <- coef(model)
+
+cat("📊 Slope:", format(coefs[2], scientific=TRUE), "\n")
+cat("📊 Intercept:", round(coefs[1], 2), "\n")
+cat("📊 R²:", round(r2, 4), "\n\n")
+
+# CRIAR GRÁFICO
+p <- ggplot(df, aes(x=Volume, y=Close)) +
+  geom_point(alpha=0.6, color='steelblue', size=2) +
+  geom_smooth(method='lm', color='red', linewidth=1.5, 
+              se=TRUE, fill='pink', alpha=0.2) +
+  labs(
+    title='Regressão Linear: Preço vs Volume (R)',
+    x='Volume Negociado',
+    y='Preço Fechamento (USD)'
+  ) +
+  annotate('text', 
+           x=min(df$Volume) + (max(df$Volume) - min(df$Volume)) * 0.05,
+           y=max(df$Close) * 0.95,
+           label=paste0(
+             'y = ', round(coefs[1], 2), ' + ',
+             format(coefs[2], scientific=TRUE, digits=2), '×Volume\n',
+             'R² = ', round(r2, 4)
+           ),
+           hjust=0, vjust=1,
+           color='red', size=4, fontface='bold',
+           fill='white', alpha=0.8) +
+  theme_minimal() +
+  theme(
+    plot.title=element_text(size=14, face='bold'),
+    axis.title=element_text(size=12),
+    panel.grid.major=element_line(color='gray90'),
+    panel.grid.minor=element_blank()
+  )
+
+# Salvar
+ggsave('slide3_r_regression.png', plot=p, 
+       width=10, height=7, dpi=150)
+
+cat("✅ slide3_r_regression.png\n")
+"""
+
+# Verificar
+println("\n" * "="^60)
+if isfile("slide3_r_regression.png")
+    println("✅ SUCESSO! Gráfico R gerado")
+    println("📂 slide3_r_regression.png")
+else
+    println("❌ Arquivo não criado")
+    println("\n💡 Possíveis problemas:")
+    println("   1. RCall não instalado: using Pkg; Pkg.add(\"RCall\")")
+    println("   2. R não tem ggplot2: install.packages(\"ggplot2\")")
+    println("   3. Erro de permissão de escrita")
+end
+
+```
+---
+
+## R - Regressão Linear
+
+<center>
+<img src="slide3_r_regression.png" style="width: 80%;">
+</center>
+---
+
+## 📊 SLIDE 5: Distribuições - Histograma vs Densidade
+
+**Dataset: Yahoo Stock Market Data - Kaggle**  
+**Tipo de variável**: 1 Quantitativa → Histograma + Densidade
+
+```{julia}
+#| echo: true
+#| output: true
+#| eval: true
+
+#| echo: true
+#| output: true
+
+using CSV, DataFrames, Plots, Statistics, Distributions
+
+println("📊 Carregando dados de ações...\n")
+
+# Função para calcular retornos
+calc_returns(prices) = [0; diff(log.(prices)) .* 100]
+
+# Tickers para analisar
+tickers = ["AAPL", "TSLA", "SPY"]
+
+# Dicionário para armazenar retornos
+returns_dict = Dict{String, Vector{Float64}}()
+
+# Carregar cada ticker
+for ticker in tickers
+    # Tentar diferentes variações de nome
+    possible_files = [
+        "$(ticker).csv",
+        "$(lowercase(ticker)).csv",
+        "yahoo-stock-market-data/$(ticker).csv",
+        "stocks_data/$(ticker).csv"
+    ]
+    
+    found = false
+    for filepath in possible_files
+        if isfile(filepath)
+            try
+                df = CSV.read(filepath, DataFrame)
+                
+                # Calcular retornos
+                returns = calc_returns(df.Close)[2:end]
+                returns_dict[ticker] = returns
+                
+                println("✅ $ticker: $(length(returns)) retornos")
+                found = true
+                break
+            catch e
+                println("⚠️  Erro ao processar $filepath: $e")
+            end
+        end
+    end
+    
+    if !found
+        println("❌ Não encontrado: $ticker")
+    end
+end
+
+println("\n📈 Total carregado: $(length(returns_dict)) ações\n")
+
+# Criar plots individuais
+plots_list = []
+
+for ticker in tickers
+    if haskey(returns_dict, ticker)
+        returns = returns_dict[ticker]
+        
+        # Cor por ticker
+        colors = Dict("AAPL" => :steelblue, "TSLA" => :purple, "SPY" => :coral)
+        color = get(colors, ticker, :blue)
+        
+        p = histogram(returns, bins=50, normalize=:pdf,
+            alpha=0.6, label="Histogram", 
+            title="$ticker - Retornos Diários",
+            xlabel="Retorno (%)", ylabel="Densidade",
+            color=color, 
+            legend=:topright)
+        
+        # KDE
+        density!(p, returns, linewidth=3, label="KDE", color=:red)
+        
+        # Normal teórica
+        plot!(p, Normal(mean(returns), std(returns)),
+            linewidth=2, label="Normal Teórica", 
+            linestyle=:dash, color=:black)
+        
+        # Estatísticas
+        annotate!(p, minimum(returns) * 0.8, maximum(returns) * 0.8,
+            text("μ = $(round(mean(returns), digits=3))%\nσ = $(round(std(returns), digits=3))%",
+                 :left, 9, :darkgray))
+        
+        push!(plots_list, p)
+    else
+        # Plot vazio se não encontrou
+        p = plot(title="$ticker\n(Não disponível)", 
+                legend=false, grid=false, showaxis=false)
+        push!(plots_list, p)
+    end
+end
+
+# Combinar plots
+if length(plots_list) >= 3
+    p_final = plot(plots_list[1], plots_list[2], plots_list[3],
+        layout=(1, 3), size=(1500, 500))
+else
+    p_final = plot(plots_list..., layout=(1, length(plots_list)))
+end
+
+# Salvar
+savefig(p_final, "distributions_returns.png")
+println("✅ Gráfico salvo: distributions_returns.png")
+
+# Mostrar
+display(p_final)
+
+# Estatísticas resumo
+println("\n" * "="^60)
+println("ESTATÍSTICAS DE RETORNOS")
+println("="^60)
+for ticker in tickers
+    if haskey(returns_dict, ticker)
+        r = returns_dict[ticker]
+        println("$ticker:")
+        println("  Média: $(round(mean(r), digits=4))%")
+        println("  Std:   $(round(std(r), digits=4))%")
+        println("  Min:   $(round(minimum(r), digits=2))%")
+        println("  Max:   $(round(maximum(r), digits=2))%")
+        println()
+    end
+end
+```
+---
+
+## Gráfico de Estatística de Retornos
+
+<center>
+<img src="distributions_returns.png" style="width: 80%;">
+</center>
+---
+
+## 📊 Comparação: AAPL, TSLA, SPY
+
+```{julia}
+#| echo: true
+#| output: true
+#| eval: true
+
+using StatsPlots, Distributions
+
+println("📊 Criando distribuições de retornos...\n")
+
+# Verificar quais dados foram carregados
+if !@isdefined(returns_dict)
+    println("⚠️  Carregando dados primeiro...")
+    
+    # Carregar dados
+    tickers = ["AAPL", "TSLA", "SPY"]
+    returns_dict = Dict{String, Vector{Float64}}()
+    
+    for ticker in tickers
+        possible_files = [
+            "$(ticker).csv",
+            "$(lowercase(ticker)).csv",
+            "yahoo-stock-market-data/$(ticker).csv"
+        ]
+        
+        for filepath in possible_files
+            if isfile(filepath)
+                try
+                    df = CSV.read(filepath, DataFrame)
+                    returns = calc_returns(df.Close)[2:end]
+                    returns_dict[ticker] = returns
+                    println("✅ $ticker")
+                    break
+                catch; end
+            end
+        end
+    end
+end
+
+# Função helper para criar plot seguro
+function create_distribution_plot(returns_dict, ticker, color=:steelblue)
+    if haskey(returns_dict, ticker)
+        returns = returns_dict[ticker]
+        
+        p = histogram(returns, bins=50, normalize=:pdf,
+            alpha=0.6, 
+            title="$ticker - Retornos Diários",
+            xlabel="Retorno (%)", 
+            ylabel="Densidade", 
+            legend=:topright,
+            color=color,
+            label="Histogram")
+        
+        density!(p, returns, linewidth=3, label="KDE", color=:red)
+        
+        plot!(p, Normal(mean(returns), std(returns)),
+            linewidth=2, label="Normal Teórica", 
+            linestyle=:dash, color=:black)
+        
+        return p
+    else
+        # Plot vazio se não existir
+        return plot(title="$ticker\n(Dados não disponíveis)", 
+                   legend=false, grid=false, showaxis=false)
+    end
+end
+
+# Criar os 3 plots
+p1 = create_distribution_plot(returns_dict, "AAPL", :steelblue)
+p2 = create_distribution_plot(returns_dict, "TSLA", :purple)
+p3 = create_distribution_plot(returns_dict, "SPY", :coral)
+
+# Combinar em layout 1x3
+p_final = plot(p1, p2, p3, layout=(1,3), size=(1500, 500))
+
+# Salvar
+savefig(p_final, "distributions_3stocks.png")
+println("\n✅ Gráfico salvo: distributions_3stocks.png")
+
+# Mostrar
+display(p_final)
+```
+---
+
+## 📊 Comparação: AAPL, TSLA, SPY
+
+<center>
+<img src="distributions_3stocks.png" style="width: 80%;">
+</center>
+---
+
+## 🐍 Python: Distribuições
+
+```{julia}
+
+#| echo: true
+#| output: true
+
+using PyCall
+
+println("🐍 Distribuições Python (SEM scipy)...\n")
+
+py"""
+import pandas as pd
+import numpy as np
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+import os
+
+# Função KDE manual (sem scipy)
+def kde_manual(data, bandwidth=None):
+    if bandwidth is None:
+        # Regra de Silverman
+        bandwidth = 1.06 * np.std(data) * len(data)**(-1/5)
+    
+    x_range = np.linspace(data.min(), data.max(), 100)
+    kde_values = np.zeros_like(x_range)
+    
+    for xi in x_range:
+        kernel = np.exp(-0.5 * ((data - xi) / bandwidth)**2)
+        kde_values[np.where(x_range == xi)] = kernel.sum() / (len(data) * bandwidth * np.sqrt(2 * np.pi))
+    
+    return x_range, kde_values
+
+# Função normal PDF manual (sem scipy)
+def normal_pdf(x, mu, sigma):
+    return (1 / (sigma * np.sqrt(2 * np.pi))) * np.exp(-0.5 * ((x - mu) / sigma)**2)
+
+# Tickers para carregar
+tickers = ['AAPL', 'TSLA', 'SPY']
+returns_data = {}
+
+print("📊 Carregando dados...\n")
+
+# Carregar cada ticker
+for ticker in tickers:
+    possible_files = [
+        f'{ticker}.csv',
+        f'{ticker.lower()}.csv',
+        f'yahoo-stock-market-data/{ticker}.csv',
+        f'stocks_data/{ticker}.csv'
+    ]
+    
+    found = False
+    for filepath in possible_files:
+        if os.path.exists(filepath):
+            try:
+                df = pd.read_csv(filepath)
+                returns = np.diff(np.log(df['Close'])) * 100
+                returns_data[ticker] = returns
+                print(f"✅ {ticker}: {len(returns)} retornos")
+                found = True
+                break
+            except Exception as e:
+                print(f"⚠️  Erro: {e}")
+    
+    if not found:
+        print(f"❌ Não encontrado: {ticker}")
+
+print(f"\n📈 Total: {len(returns_data)} ações\n")
+
+# Criar figura
+fig, axes = plt.subplots(1, 3, figsize=(15, 5), dpi=150)
+
+# Cores
+colors = {'AAPL': 'steelblue', 'TSLA': 'purple', 'SPY': 'coral'}
+
+for idx, ticker in enumerate(tickers):
+    ax = axes[idx]
+    
+    if ticker in returns_data:
+        returns = returns_data[ticker]
+        color = colors.get(ticker, 'steelblue')
+        
+        # Histograma
+        ax.hist(returns, bins=50, density=True, alpha=0.6, 
+                label='Histogram', color=color)
+        
+        # KDE manual
+        x_kde, y_kde = kde_manual(returns)
+        ax.plot(x_kde, y_kde, 'r-', linewidth=3, label='KDE')
+        
+        # Normal teórica manual
+        mu, sigma = returns.mean(), returns.std()
+        x_norm = np.linspace(returns.min(), returns.max(), 100)
+        y_norm = normal_pdf(x_norm, mu, sigma)
+        ax.plot(x_norm, y_norm, 'k--', linewidth=2, label='Normal Teórica')
+        
+        ax.set_title(f'{ticker} - Retornos Diários', 
+                     fontsize=14, fontweight='bold')
+        ax.set_xlabel('Retorno (%)', fontsize=12)
+        ax.set_ylabel('Densidade', fontsize=12)
+        ax.legend(loc='best')
+        ax.grid(True, alpha=0.3, linestyle='--')
+        
+        # Estatísticas
+        stats_text = f'μ = {mu:.3f}%\\nσ = {sigma:.3f}%'
+        ax.text(0.05, 0.95, stats_text,
+                transform=ax.transAxes,
+                fontsize=9,
+                verticalalignment='top',
+                bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+    else:
+        ax.text(0.5, 0.5, f'{ticker}\\n(Não disponível)',
+                ha='center', va='center', fontsize=12)
+        ax.set_title(f'{ticker}', fontsize=14)
+        ax.axis('off')
+
+plt.tight_layout()
+plt.savefig('slide5_python_distributions.png', dpi=150, bbox_inches='tight')
+print("✅ slide5_python_distributions.png")
+plt.close()
+"""
+
+if isfile("slide5_python_distributions.png")
+    println("\n✅ SUCESSO!")
+else
+    println("\n❌ Falhou")
+end
+```
+---
+
+## Python: Distribuições
+
+<center>
+<img src="slide5_python_distributions.png" style="width: 80%;">
+</center>
+---
+
+## 📈 R: Distribuições
+
+```{julia}
+#| echo: true
+#| eval: false
+
+r_dist = """
+library(ggplot2)
+library(patchwork)
+
+aapl <- read.csv('yahoo-stock-market-data/AAPL.csv')
+tsla <- read.csv('yahoo-stock-market-data/TSLA.csv')
+spy <- read.csv('yahoo-stock-market-data/SPY.csv')
+
+returns_aapl <- diff(log(aapl\\$Close)) * 100
+returns_tsla <- diff(log(tsla\\$Close)) * 100
+returns_spy <- diff(log(spy\\$Close)) * 100
+
+df_returns <- data.frame(
+  Return = c(returns_aapl, returns_tsla, returns_spy),
+  Asset = c(rep('AAPL', length(returns_aapl)),
+            rep('TSLA', length(returns_tsla)),
+            rep('SPY', length(returns_spy)))
+)
+
+ggplot(df_returns, aes(x = Return, fill = Asset)) +
+  geom_histogram(aes(y = ..density..), bins = 50, alpha = 0.6) +
+  geom_density(aes(color = Asset), linewidth = 1.5) +
+  facet_wrap(~Asset, scales = 'free') +
+  labs(title = 'Distribuição de Retornos',
+       x = 'Retorno (%)',
+       y = 'Densidade') +
+  theme_minimal() +
+  theme(plot.title = element_text(size = 14),
+        axis.title = element_text(size = 12))
+
+ggsave('slide5_r_distributions.png', width = 15, height = 5, dpi = 300)
+"""
+
+println(r_dist)
+```
+---
+
+## R: Distribuições
+
+<center>
+<img src="slide5_r_distributions.png" style="width: 80%;">
+</center>
+---
+
+## 📊 Estatísticas Descritivas
+
+```{julia}
+#| echo: true
+#| output: true
+
+using StatsBase
+
+println("=== Estatísticas de Retornos ===\n")
+println("AAPL:")
+println("  Média: $(round(mean(returns_aapl), digits=3))%")
+println("  Std: $(round(std(returns_aapl), digits=3))%")
+println("  Assimetria: $(round(skewness(returns_aapl), digits=3))")
+println("  Curtose: $(round(kurtosis(returns_aapl), digits=3))")
+
+println("\nTSLA:")
+println("  Média: $(round(mean(returns_tsla), digits=3))%")
+println("  Std: $(round(std(returns_tsla), digits=3))%")
+println("  Assimetria: $(round(skewness(returns_tsla), digits=3))")
+println("  Curtose: $(round(kurtosis(returns_tsla), digits=3))")
+
+println("\nSPY:")
+println("  Média: $(round(mean(returns_spy), digits=3))%")
+println("  Std: $(round(std(returns_spy), digits=3))%")
+println("  Assimetria: $(round(skewness(returns_spy), digits=3))")
+println("  Curtose: $(round(kurtosis(returns_spy), digits=3))")
+```
+
+---
+
+## 📦 SLIDE 6: Boxplot e Violin Plot
+
+**Tipo de variável**: 1 Quantitativa + 1 Categórica → Boxplot/Violin
+
+```{julia}
+#| echo: true
+#| output: true
+#| eval: true
+
+# Criar dados por setor
+sectors_data = Dict(
+    "Tech" => ["AAPL.csv", "MSFT.csv", "GOOGL.csv"],
+    "Finance" => ["JPM.csv", "BAC.csv", "GS.csv"],
+    "Energy" => ["XOM.csv", "CVX.csv"],
+    "Consumer" => ["AMZN.csv", "WMT.csv"]
+)
+
+df_sectors = DataFrame(Setor=String[], Retorno=Float64[])
+
+for (sector, stocks) in sectors_data
+    for stock in stocks
+        try
+            df_stock = CSV.read("yahoo-stock-market-data/$stock", DataFrame)
+            returns = calc_returns(df_stock.Close)[2:end]
+            for r in returns
+                push!(df_sectors, (sector, r))
+            end
+        catch e
+            continue
+        end
+    end
+end
+
+# Boxplot
+@df df_sectors boxplot(:Setor, :Retorno,
+    title="Distribuição de Retornos por Setor",
+    ylabel="Retorno Diário (%)", xlabel="Setor",
+    legend=false, fillalpha=0.6, size=(1000, 600))
+```
+
+---
+
+## 🎻 Violin Plot
+
+```{julia}
+#| echo: true
+#| output: true
+
+# Violin plot com boxplot sobreposto
+@df df_sectors violin(:Setor, :Retorno,
+    title="Violin Plot - Retornos por Setor",
+    ylabel="Retorno Diário (%)", xlabel="Setor",
+    legend=false, linewidth=0, fillalpha=0.6,
+    size=(1000, 600))
+
+@df df_sectors boxplot!(:Setor, :Retorno,
+    fillalpha=0.3, linewidth=2, label=false)
+```
+
+---
+
+## 🐍 Python: Boxplot e Violin
+
+```{julia}
+#| echo: true
+#| output: true
+
+using CSV, DataFrames, Plots, Statistics
+
+println("🔍 DIAGNÓSTICO: Procurando arquivos CSV...\n")
+
+# Listar TODOS os arquivos CSV no diretório atual e subpastas
+function find_csv_files(dir=".")
+    csvs = String[]
+    for (root, dirs, files) in walkdir(dir)
+        for file in files
+            if endswith(lowercase(file), ".csv")
+                push!(csvs, joinpath(root, file))
+            end
+        end
+    end
+    return csvs
+end
+
+all_csvs = find_csv_files()
+
+println("📂 Arquivos CSV encontrados:")
+for (i, csv) in enumerate(all_csvs[1:min(20, length(all_csvs))])
+    println("  $i. $csv")
+end
+
+if length(all_csvs) > 20
+    println("  ... e mais $(length(all_csvs) - 20) arquivos")
+end
+
+println("\n" * "="^70)
+println("AGORA O CÓDIGO QUE FUNCIONA:")
+println("="^70 * "\n")
+
+# Função para calcular retornos
+calc_returns(prices) = [0; [log(prices[i]/prices[i-1])*100 for i in 2:length(prices)]]
+
+# Tickers que queremos (em MINÚSCULO - importante!)
+tickers_wanted = ["aapl", "msft", "googl", "amzn", "tsla", "jpm", "bac", "spy"]
+
+# Encontrar os arquivos que correspondem
+df_corr = DataFrame()
+loaded = String[]
+
+for ticker in tickers_wanted
+    # Procurar arquivo que contenha o ticker no nome
+    found_file = nothing
+    
+    for csv_path in all_csvs
+        filename = lowercase(basename(csv_path))
+        if contains(filename, ticker) || filename == "$(ticker).csv"
+            found_file = csv_path
+            break
+        end
+    end
+    
+    if !isnothing(found_file)
+        try
+            println("📊 Carregando: $found_file")
+            df = CSV.read(found_file, DataFrame)
+            
+            # Debug: mostrar colunas
+            println("   Colunas: $(names(df))")
+            
+            # Encontrar coluna de preço
+            close_col = nothing
+            for col in names(df)
+                if lowercase(string(col)) in ["close", "adj close", "adj_close", "adjclose"]
+                    close_col = col
+                    break
+                end
+            end
+            
+            if !isnothing(close_col)
+                prices = Float64.(df[!, close_col])
+                returns = calc_returns(prices)[2:end]  # Pular primeiro zero
+                returns = returns[1:min(1000, length(returns))]
+                
+                df_corr[!, Symbol(uppercase(ticker))] = returns
+                push!(loaded, uppercase(ticker))
+                println("   ✅ $(uppercase(ticker)): $(length(returns)) retornos")
+            else
+                println("   ❌ Coluna 'Close' não encontrada")
+            end
+        catch e
+            println("   ⚠️  Erro: $e")
+        end
+    else
+        println("❌ Não encontrado: $ticker")
+    end
+end
+
+println("\n" * "="^70)
+
+# Se não achou NADA, gerar dados simulados
+if isempty(loaded)
+    println("⚠️  NENHUM ARQUIVO VÁLIDO! Usando dados simulados...\n")
+    for ticker in tickers_wanted
+        df_corr[!, Symbol(uppercase(ticker))] = randn(1000) .* 2
+        push!(loaded, uppercase(ticker))
+    end
+end
+
+println("\n✅ Total carregado: $(length(loaded)) ações")
+println("📋 Ações: $(join(loaded, ", "))\n")
+
+# Alinhar tamanhos
+if ncol(df_corr) > 0
+    min_len = minimum([nrow(df_corr)])
+    df_corr = df_corr[1:min_len, :]
+    
+    println("📊 Matriz final: $(nrow(df_corr)) × $(ncol(df_corr))")
+    
+    # Calcular correlação
+    println("🔢 Calculando correlações...")
+    cor_matrix = cor(Matrix(df_corr))
+    
+    # CRIAR HEATMAP
+    println("🎨 Criando heatmap...")
+    
+    p = heatmap(names(df_corr), names(df_corr), cor_matrix,
+        c=cgrad(:RdBu, rev=true),
+        clims=(-1, 1),
+        title="Matriz de Correlação - Retornos Diários",
+        aspect_ratio=:equal,
+        size=(900, 800),
+        xrotation=45,
+        colorbar_title="Correlação")
+    
+    # Adicionar valores
+    for i in 1:size(cor_matrix, 1), j in 1:size(cor_matrix, 2)
+        val = cor_matrix[i, j]
+        color = abs(val) > 0.5 ? :white : :black
+        annotate!(j, i, text(round(val, digits=2), 8, color))
+    end
+    
+    # SALVAR
+    savefig(p, "correlation_heatmap.png")
+    println("\n✅ SUCESSO! Salvo: correlation_heatmap.png")
+    
+    # MOSTRAR
+    display(p)
+else
+    println("❌ DataFrame vazio!")
+end
+```
+
+---
+
+## 📊 Scatter Plots de Correlações Específicas
+
+```{julia}
+#| echo: true
+#| output: true
+
+#| echo: true
+#| output: true
+
+# Verificar quais colunas existem
+println("📋 Colunas disponíveis: $(names(df_corr))")
+
+# Criar scatter plots com verificação de existência
+plots_list = []
+
+# Função helper para criar scatter seguro
+function safe_scatter(df, col1, col2, color_choice)
+    if hasproperty(df, col1) && hasproperty(df, col2)
+        corr_val = round(cor(df[!, col1], df[!, col2]), digits=3)
+        return scatter(df[!, col1], df[!, col2],
+            title="$(string(col1)) vs $(string(col2)) (r=$corr_val)",
+            xlabel="Retorno $(string(col1)) (%)", 
+            ylabel="Retorno $(string(col2)) (%)",
+            alpha=0.5, 
+            label=false, 
+            markersize=3, 
+            color=color_choice,
+            grid=true,
+            gridalpha=0.3)
+    else
+        # Plot vazio se não existir
+        return plot(title="$(string(col1)) vs $(string(col2))\n(Dados não disponíveis)",
+                   legend=false, grid=false, showaxis=false)
+    end
+end
+
+# Criar os 4 plots
+p1 = safe_scatter(df_corr, :AAPL, :MSFT, :steelblue)
+p2 = safe_scatter(df_corr, :AAPL, :SPY, :coral)
+p3 = safe_scatter(df_corr, :TSLA, :SPY, :purple)
+p4 = safe_scatter(df_corr, :JPM, :BAC, :green)
+
+# Combinar em layout 2x2
+p_final = plot(p1, p2, p3, p4, 
+    layout=(2,2), 
+    size=(1200, 1000),
+    plot_title="Correlações entre Ativos",
+    plot_titlefontsize=16)
+
+# Salvar
+savefig(p_final, "scatter_correlations.png")
+println("\n✅ Gráfico salvo: scatter_correlations.png")
+
+# Mostrar
+display(p_final)
+```
+
+---
+
+## 🐍 Python: Heatmap de Correlação
+
+```{julia}
+#| echo: true
+#| eval: false
+
+using PyCall
+
+println("🐍 Executando código Python...\n")
+
+py"""
+import pandas as pd
+import numpy as np
+import matplotlib
+matplotlib.use('Agg')  # Backend não-interativo
+import matplotlib.pyplot as plt
+import seaborn as sns
+import os
+
+# Configurar estilo
+sns.set_style("whitegrid")
+
+# Tickers para carregar
+stocks = ['aapl', 'msft', 'googl', 'amzn', 'tsla', 'jpm', 'bac', 'spy']
+df_corr = pd.DataFrame()
+
+print("📊 Procurando arquivos CSV...\n")
+
+# Buscar CSVs em diferentes locais
+search_paths = ['.', 'stocks_data', 'yahoo-stock-market-data', 'stocks']
+
+for stock in stocks:
+    found = False
+    
+    # Tentar diferentes caminhos e variações de nome
+    for path in search_paths:
+        for filename in [f'{stock}.csv', f'{stock.upper()}.csv']:
+            filepath = os.path.join(path, filename)
+            
+            if os.path.exists(filepath):
+                try:
+                    df_stock = pd.read_csv(filepath)
+                    
+                    # Verificar coluna Close
+                    close_col = None
+                    for col in df_stock.columns:
+                        if col.lower() in ['close', 'adj close', 'adj_close']:
+                            close_col = col
+                            break
+                    
+                    if close_col:
+                        # Calcular retornos
+                        prices = df_stock[close_col].dropna()
+                        returns = np.diff(np.log(prices)) * 100
+                        returns = returns[:1000]  # Limitar
+                        
+                        df_corr[stock.upper()] = pd.Series(returns)
+                        print(f"✅ {stock.upper()}: {len(returns)} retornos")
+                        found = True
+                        break
+                    
+                except Exception as e:
+                    print(f"⚠️  Erro em {stock}: {e}")
+        
+        if found:
+            break
+    
+    if not found:
+        print(f"❌ Não encontrado: {stock}")
+
+# Se não carregou nada, gerar dados simulados
+if df_corr.empty:
+    print("\n⚠️  Nenhum arquivo encontrado! Gerando dados simulados...\n")
+    np.random.seed(42)
+    for stock in stocks:
+        df_corr[stock.upper()] = np.random.randn(1000) * 2
+
+print(f"\n✅ Total carregado: {len(df_corr.columns)} ações")
+print(f"📋 Ações: {', '.join(df_corr.columns)}\n")
+
+# Alinhar tamanhos (pegar menor comprimento)
+min_len = df_corr.apply(lambda x: x.notna().sum()).min()
+df_corr = df_corr.iloc[:min_len]
+
+print(f"📊 Matriz final: {df_corr.shape}\n")
+
+# Calcular correlação
+corr_matrix = df_corr.corr()
+
+# Criar heatmap
+fig, ax = plt.subplots(figsize=(10, 8), dpi=150)
+
+sns.heatmap(corr_matrix, 
+            annot=True, 
+            fmt='.2f',
+            cmap='RdBu_r', 
+            vmin=-1, 
+            vmax=1,
+            square=True, 
+            linewidths=0.5,
+            cbar_kws={'label': 'Correlação'},
+            ax=ax)
+
+ax.set_title('Matriz de Correlação - Retornos Diários', 
+             fontsize=14, 
+             pad=20,
+             fontweight='bold')
+
+plt.xticks(rotation=45, ha='right')
+plt.yticks(rotation=0)
+plt.tight_layout()
+
+# Salvar
+plt.savefig('slide7_python_correlation.png', dpi=150, bbox_inches='tight')
+print("✅ Gráfico salvo: slide7_python_correlation.png")
+
+plt.close()
+"""
+
+# Verificar se arquivo foi criado
+if isfile("slide7_python_correlation.png")
+    println("\n✅ SUCESSO! Gráfico Python gerado")
+    println("📂 Arquivo: slide7_python_correlation.png")
+else
+    println("\n❌ Arquivo não foi criado")
+    println("💡 Verifique se PyCall está instalado: using Pkg; Pkg.add(\"PyCall\")")
+end
+```
+
+---
+
+## 📈 R: Heatmap de Correlação
+
+```{julia}
+#| echo: true
+#| eval: false
+
+r_corr = """
+library(ggplot2)
+library(reshape2)
+
+# Carregar dados
+stocks <- c('AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'JPM', 'BAC', 'SPY')
+df_corr <- data.frame(matrix(ncol = 0, nrow = 1000))
+
+for (stock in stocks) {
+  tryCatch({
+    df_stock <- read.csv(paste0('yahoo-stock-market-data/', stock, '.csv'))
+    returns <- diff(log(df_stock\\$Close)) * 100
+    df_corr[[stock]] <- returns[1:1000]
+  }, error = function(e) {})
+}
+
+# Matriz de correlação
+corr_matrix <- cor(df_corr, use = 'complete.obs')
+melted_corr <- melt(corr_matrix)
+
+ggplot(melted_corr, aes(x = Var1, y = Var2, fill = value)) +
+  geom_tile() +
+  geom_text(aes(label = round(value, 2)), size = 3) +
+  scale_fill_gradient2(low = 'blue', mid = 'white', high = 'red',
+                       midpoint = 0, limits = c(-1, 1)) +
+  labs(title = 'Matriz de Correlação - Retornos Diários',
+       x = '', y = '') +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.title = element_text(size = 14))
+
+ggsave('slide7_r_correlation.png', width = 10, height = 8, dpi = 300)
+"""
+
+println(r_corr)
+```
+
+---
+
+## 📈 SLIDE 8: Séries Temporais - Decomposição
+
+**Tipo de variável**: Temporal → Linha + Decomposição
+
+```{julia}
+#| echo: true
+#| output: true
+
+using Dates
+
+# Carregar dados SPY
+df_sp500 = CSV.read("yahoo-stock-market-data/SPY.csv", DataFrame)
+df_sp500.Date = Date.(df_sp500.Date, "yyyy-mm-dd")
+
+# Usar últimos 750 dias
+df_ts = last(df_sp500, 750)
+serie = df_ts.Close
+
+# Série original
+plot(df_ts.Date, serie,
+    title="S&P 500 (SPY) - Série Temporal Original",
+    xlabel="Data", ylabel="Preço (USD)",
+    label="Preço de Fechamento",
+    linewidth=1.5,
+    size=(1400, 500),
+    color=:steelblue)
+```
+
+---
+
+## 📊 Decomposição de Séries Temporais
+
+```{julia}
+#| echo: true
+#| output: true
+
+n = length(serie)
+
+# 1. Tendência (média móvel 30 dias)
+window = 30
+tendencia = [mean(serie[max(1,i-window):min(n,i+window)]) for i in 1:n]
+
+# 2. Dessazonalizar
+serie_dessaz = serie .- tendencia
+
+# 3. Sazonalidade (média móvel de 252 dias - 1 ano de trading)
+sazonalidade = [mean(serie_dessaz[i:252:end]) for i in 1:min(252, n)]
+sazonalidade = repeat(sazonalidade, outer=ceil(Int, n/length(sazonalidade)))[1:n]
+
+# 4. Resíduos
+residuos = serie .- tendencia .- sazonalidade
+
+# Plot de decomposição
+p1 = plot(df_ts.Date, serie, title="Série Original", 
+    label=false, lw=1.5, color=:blue)
+p2 = plot(df_ts.Date, tendencia, title="Tendência (MA 30)", 
+    label=false, lw=2, color=:red)
+p3 = plot(df_ts.Date, sazonalidade, title="Sazonalidade", 
+    label=false, lw=1.5, color=:green)
+p4 = plot(df_ts.Date, residuos, title="Resíduos", 
+    label=false, lw=1, color=:gray, alpha=0.7)
+
+plot(p1, p2, p3, p4, layout=(4,1), size=(1400, 1000))
+```
+
+---
+
+## 🐍 Python: Decomposição de Séries
+
+```{julia}
+#| echo: true
+#| eval: false
+
+python_ts = """
+import pandas as pd
+import matplotlib.pyplot as plt
+from statsmodels.tsa.seasonal import seasonal_decompose
+
+df = pd.read_csv('yahoo-stock-market-data/SPY.csv', parse_dates=['Date'])
+df = df.set_index('Date').tail(750)
+
+# Decomposição automática
+result = seasonal_decompose(df['Close'], model='additive', period=30)
+
+fig, (ax1, ax2, ax3, ax4) = plt.subplots(4, 1, figsize=(14, 10))
+result.observed.plot(ax=ax1, title='Série Original', color='blue')
+ax1.set_ylabel('Preço (USD)')
+
+result.trend.plot(ax=ax2, title='Tendência', color='red')
+ax2.set_ylabel('Tendência')
+
+result.seasonal.plot(ax=ax3, title='Sazonalidade', color='green')
+ax3.set_ylabel('Sazonalidade')
+
+result.resid.plot(ax=ax4, title='Resíduos', color='gray', alpha=0.7)
+ax4.set_ylabel('Resíduos')
+
+plt.tight_layout()
+plt.savefig('slide8_python_decomposition.png', dpi=300)
+plt.show()
+"""
+
+println(python_ts)
+```
+
+---
+
+## 📈 R: Decomposição de Séries
+
+```{julia}
+#| echo: true
+#| eval: false
+
+r_ts = """
+library(forecast)
+library(ggplot2)
+
+df <- read.csv('yahoo-stock-market-data/SPY.csv')
+df\\$Date <- as.Date(df\\$Date)
+df <- tail(df, 750)
+
+ts_data <- ts(df\\$Close, frequency = 30)
+decomp <- decompose(ts_data, type = 'additive')
+
+# Plot de decomposição
+png('slide8_r_decomposition.png', width = 1400, height = 1000, res = 150)
+plot(decomp)
+dev.off()
+
+# Ou usar autoplot com ggfortify
+# library(ggfortify)
+# autoplot(decomp) + theme_minimal()
+"""
+
+println(r_ts)
+```
+
+---
+
+## 🔍 SLIDE 9: Diagnóstico de Regressão
+
+**Verificação de Pressupostos**: Resíduos, Q-Q Plot, Homocedasticidade
+
+```{julia}
+#| echo: true
+#| output: true
+
+# Usar modelo de regressão anterior
+modelo_diagnostico = lm(@formula(Close ~ Volume), df_sample)
+y_pred = predict(modelo_diagnostico)
+residuos = df_sample.Close .- y_pred
+residuos_pad = residuos ./ std(residuos)
+
+# 1. Resíduos vs Valores Ajustados
+p1 = scatter(y_pred, residuos_pad,
+    title="Resíduos vs Valores Ajustados",
+    xlabel="Valores Preditos", ylabel="Resíduos Padronizados",
+    alpha=0.5, label=false, markersize=3, color=:steelblue)
+hline!([0], color=:red, linestyle=:dash, linewidth=2)
+hline!([-2, 2], color=:orange, linestyle=:dash)
+
+# 2. Q-Q Plot
+residuos_sorted = sort(residuos_pad)
+n_res = length(residuos_sorted)
+quantis_teoricos = quantile(Normal(0, 1), range(0.01, 0.99, length=n_res))
+
+p2 = scatter(quantis_teoricos, residuos_sorted,
+    title="Q-Q Plot",
+    xlabel="Quantis Teóricos", ylabel="Quantis Amostrais",
+    label=false, alpha=0.5, markersize=3, color=:coral)
+plot!(quantis_teoricos, quantis_teoricos, 
+    color=:red, linewidth=2, label="Normal")
+
+# 3. Scale-Location
+p3 = scatter(y_pred, sqrt.(abs.(residuos_pad)),
+    title="Scale-Location",
+    xlabel="Valores Ajustados", 
+    ylabel="√|Resíduos Padronizados|",
+    label=false, alpha=0.5, markersize=3, color=:purple)
+
+# 4. Histograma de resíduos
+p4 = histogram(residuos_pad, 
+    bins=30, 
+    title="Distribuição dos Resíduos",
+    xlabel="Resíduos Padronizados",
+    normalize=:pdf,
+    alpha=0.6,
+    label="Resíduos",
+    color=:green)
+plot!(Normal(0, 1), linewidth=3, color=:red, label="N(0,1)")
+
+plot(p1, p2, p3, p4, layout=(2,2), size=(1400, 1000))
+```
+
+---
+
+## 🐍 Python: Diagnóstico de Regressão
+
+```{julia}
+#| echo: true
+#| eval: false
+
+python_diag = """
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import statsmodels.api as sm
+from scipy import stats
+
+df = pd.read_csv('Stocks/aapl.us.txt')
+df = df.dropna(subset=['Close', 'Volume'])
+df = df[df['Volume'] > 0].tail(500)
+
+X = sm.add_constant(df['Volume'])
+y = df['Close']
+model = sm.OLS(y, X).fit()
+
+fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(14, 10))
+
+# Resíduos vs Ajustados
+ax1.scatter(model.fittedvalues, model.resid, alpha=0.5, color='steelblue')
+ax1.axhline(0, color='red', linestyle='--', linewidth=2)
+ax1.set_title('Resíduos vs Valores Ajustados', fontsize=14)
+ax1.set_xlabel('Valores Preditos', fontsize=12)
+ax1.set_ylabel('Resíduos', fontsize=12)
+
+# Q-Q Plot
+stats.probplot(model.resid, dist='norm', plot=ax2)
+ax2.set_title('Q-Q Plot', fontsize=14)
+
+# Scale-Location
+ax3.scatter(model.fittedvalues, np.sqrt(np.abs(model.resid)), 
+            alpha=0.5, color='purple')
+ax3.set_title('Scale-Location', fontsize=14)
+ax3.set_xlabel('Valores Ajustados', fontsize=12)
+ax3.set_ylabel('√|Resíduos|', fontsize=12)
+
+# Histograma
+ax4.hist(model.resid, bins=30, density=True, alpha=0.6, color='green')
+xmin, xmax = ax4.get_xlim()
+x = np.linspace(xmin, xmax, 100)
+ax4.plot(x, stats.norm.pdf(x, 0, model.resid.std()), 'r-', linewidth=3)
+ax4.set_title('Distribuição dos Resíduos', fontsize=14)
+
+plt.tight_layout()
+plt.savefig('slide9_python_diagnostico.png', dpi=300)
+plt.show()
+
+print(f'R² = {model.rsquared:.4f}')
+print(model.summary())
+"""
+
+println(python_diag)
+```
+
+---
+
+## 📈 R: Diagnóstico de Regressão
+
+```{julia}
+#| echo: true
+#| eval: false
+
+r_diag = """
+# R tem plot de diagnóstico automático muito poderoso
+df <- read.csv('Stocks/aapl.us.txt')
+df <- na.omit(df[, c('Close', 'Volume')])
+df <- df[df\\$Volume > 0, ]
+df <- tail(df, 500)
+
+modelo <- lm(Close ~ Volume, data = df)
+
+# Plot automático de diagnóstico (4 gráficos)
+png('slide9_r_diagnostico.png', width = 1400, height = 1000, res = 150)
+par(mfrow = c(2, 2))
+plot(modelo)
+dev.off()
+
+# Resumo do modelo
+summary(modelo)
+
+# Os 4 gráficos incluem:
+# 1. Residuals vs Fitted
+# 2. Normal Q-Q
+# 3. Scale-Location
+# 4. Residuals vs Leverage
+"""
+
+println(r_diag)
+```
+
+---
+
+## 📊 ANÁLISE EXPLORATÓRIA COMPLETA (EDA)
+
+**Portfolio de Ações - Análise Integrada**
+
+```{julia}
+#| echo: true
+#| output: true
+
+# Carregar múltiplos ativos para análise de portfólio
+portfolio_stocks = ["AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "JPM", "BAC", "XOM", "SPY"]
+df_portfolio = DataFrame()
+
+println("Carregando dados do portfolio...")
+for stock in portfolio_stocks
+    try
+        df_temp = CSV.read("yahoo-stock-market-data/$(stock).csv", DataFrame)
+        df_temp.Date = Date.(df_temp.Date, "yyyy-mm-dd")
+        df_temp = sort(df_temp, :Date)
+        
+        # Adicionar coluna de ativo
+        df_temp.Ticker = fill(stock, nrow(df_temp))
+        
+        # Calcular retornos
+        df_temp.Return = [0.0; diff(log.(df_temp.Close)) .* 100]
+        
+        # Volatilidade rolante (30 dias)
+        df_temp.Volatility = [std(df_temp.Return[max(1,i-29):i]) for i in 1:nrow(df_temp)]
+        
+        append!(df_portfolio, df_temp)
+    catch e
+        println("Erro ao carregar $stock")
+    end
+end
+
+println("\nDimensões totais: $(size(df_portfolio))")
+println("Período: $(minimum(df_portfolio.Date)) até $(maximum(df_portfolio.Date))")
+println("Ativos: $(length(unique(df_portfolio.Ticker)))")
+```
+
+---
+
+## 📊 Evolução de Preços Normalizada
+
+```{julia}
+#| echo: true
+#| output: true
+
+# Normalizar preços para 100 (índice base)
+df_normalized = DataFrame()
+for ticker in portfolio_stocks
+    df_ticker = filter(row -> row.Ticker == ticker, df_portfolio)
+    df_ticker = sort(df_ticker, :Date)
+    
+    if nrow(df_ticker) > 0
+        base_price = df_ticker.Close[1]
+        df_ticker.NormalizedPrice = (df_ticker.Close ./ base_price) .* 100
+        append!(df_normalized, df_ticker)
+    end
+end
+
+# Plot de evolução normalizada
+p_evolution = plot(title="Evolução de Preços Normalizada (Base = 100)",
+    xlabel="Data",
+    ylabel="Preço Indexado",
+    size=(1400, 700),
+    legend=:outertopright)
+
+for ticker in portfolio_stocks
+    df_t = filter(row -> row.Ticker == ticker, df_normalized)
+    if nrow(df_t) > 0
+        plot!(df_t.Date, df_t.NormalizedPrice, 
+            label=ticker, linewidth=2, alpha=0.8)
+    end
+end
+
+p_evolution
+```
+
+---
+
+## 📊 Análise Risco-Retorno
+
+```{julia}
+#| echo: true
+#| output: true
+
+# Calcular métricas por ativo
+risk_return = combine(
+    groupby(df_portfolio, :Ticker),
+    :Return => (x -> mean(skipmissing(x))) => :AvgReturn,
+    :Return => (x -> std(skipmissing(x))) => :Risk,
+    :Return => (x -> mean(skipmissing(x)) / std(skipmissing(x))) => :SharpeRatio
+)
+
+# Gráfico Retorno vs Risco
+scatter(risk_return.Risk, risk_return.AvgReturn,
+    title="Relação Risco-Retorno por Ativo",
+    xlabel="Risco (Volatilidade - Std Dev %)",
+    ylabel="Retorno Médio Diário (%)",
+    label=false,
+    markersize=10,
+    alpha=0.7,
+    size=(1000, 700),
+    color=:steelblue)
+
+# Adicionar labels dos ativos
+for i in 1:nrow(risk_return)
+    annotate!(risk_return.Risk[i], risk_return.AvgReturn[i] + 0.01,
+        text(risk_return.Ticker[i], 10, :black))
+end
+
+hline!([0], color=:red, linestyle=:dash, linewidth=2, label="Retorno Zero")
+```
+
+---
+
+## 📊 Índice de Sharpe
+
+```{julia}
+#| echo: true
+#| output: true
+
+bar(risk_return.Ticker, risk_return.SharpeRatio,
+    title="Índice de Sharpe por Ativo",
+    xlabel="Ativo",
+    ylabel="Sharpe Ratio",
+    legend=false,
+    fillcolor=:coral,
+    xrotation=45,
+    size=(1000, 600))
+
+hline!([0], color=:red, linestyle=:dash, linewidth=2)
+```
+
+---
+
+## 📊 Volatilidade Rolante
+
+```{julia}
+#| echo: true
+#| output: true
+
+selected_tickers = ["AAPL", "TSLA", "SPY"]
+df_vol = filter(row -> row.Ticker in selected_tickers, df_portfolio)
+
+p_vol = plot(title="Volatilidade Rolante (30 dias)",
+    xlabel="Data",
+    ylabel="Volatilidade (%)",
+    size=(1400, 700),
+    legend=:topright)
+
+for ticker in selected_tickers
+    df_t = filter(row -> row.Ticker == ticker, df_vol)
+    df_t = sort(df_t, :Date)
+    plot!(df_t.Date, df_t.Volatility, 
+        label=ticker, linewidth=2, alpha=0.8)
+end
+
+p_vol
+```
+
+---
+
+## 📊 Cálculo de Beta (Risco Sistemático)
+
+```{julia}
+#| echo: true
+#| output: true
+
+# Beta: Sensibilidade de cada ativo ao mercado (SPY)
+df_spy = filter(row -> row.Ticker == "SPY", df_portfolio)
+df_spy = sort(df_spy, :Date)
+
+beta_results = DataFrame(Ticker=String[], Beta=Float64[], R2=Float64[])
+
+for ticker in setdiff(portfolio_stocks, ["SPY"])
+    df_asset = filter(row -> row.Ticker == ticker, df_portfolio)
+    
+    # Merge com SPY por data
+    df_merged = innerjoin(
+        df_asset[!, [:Date, :Return]],
+        df_spy[!, [:Date, :Return]],
+        on=:Date,
+        makeunique=true
+    )
+    rename!(df_merged, :Return => :AssetReturn, :Return_1 => :MarketReturn)
+    
+    # Remover NaN
+    df_merged = dropmissing(df_merged)
+    df_merged = filter(row -> row.AssetReturn != 0 && row.MarketReturn != 0, df_merged)
+    
+    if nrow(df_merged) > 30
+        # Calcular Beta via regressão
+        model_beta = lm(@formula(AssetReturn ~ MarketReturn), df_merged)
+        beta = coef(model_beta)[2]
+        r2_val = r2(model_beta)
+        
+        push!(beta_results, (ticker, beta, r2_val))
+    end
+end
+
+# Visualizar Betas
+bar(beta_results.Ticker, beta_results.Beta,
+    title="Beta do Mercado (SPY) por Ativo",
+    xlabel="Ativo",
+    ylabel="Beta",
+    legend=false,
+    fillcolor=:teal,
+    xrotation=45,
+    size=(1000, 600))
+
+hline!([1.0], color=:red, linestyle=:dash, linewidth=2, label="Beta = 1 (Mercado)")
+hline!([0.0], color=:black, linestyle=:dash, linewidth=1)
+```
+
+---
+
+## 📊 Dashboard Executivo - 6 Painéis
+
+```{julia}
+#| echo: true
+#| output: true
+
+returns_all = filter(!isnan, df_portfolio.Return)
+returns_all = filter(!iszero, returns_all)
+
+# 1. Distribuição de retornos
+p1 = histogram(returns_all, bins=50, title="Distribuição Retornos",
+    xlabel="", ylabel="", legend=false, titlefontsize=9,
+    normalize=:pdf, fillalpha=0.7)
+
+# 2. Top 5 Sharpe
+top5_sharpe = first(sort(risk_return, :SharpeRatio, rev=true), 5)
+p2 = bar(top5_sharpe.Ticker, top5_sharpe.SharpeRatio,
+    title="Top 5 Sharpe Ratio", xlabel="", ylabel="",
+    legend=false, titlefontsize=9, fillcolor=:coral, xrotation=45)
+
+# 3. Risco vs Retorno
+p3 = scatter(risk_return.Risk, risk_return.AvgReturn,
+    title="Risco vs Retorno", xlabel="Risco", ylabel="Retorno",
+    legend=false, markersize=6, titlefontsize=9, alpha=0.7)
+hline!([0], color=:red, linestyle=:dash)
+
+# 4. Evolução (3 ativos)
+df_top3 = filter(row -> row.Ticker in ["AAPL", "SPY", "TSLA"], df_normalized)
+p4 = plot(title="Evolução Preços", xlabel="", ylabel="",
+    titlefontsize=9, legend=:topleft, legendfontsize=6)
+for ticker in ["AAPL", "SPY", "TSLA"]
+    df_t = filter(row -> row.Ticker == ticker, df_top3)
+    plot!(df_t.Date, df_t.NormalizedPrice, label=ticker, linewidth=1.5)
+end
+
+# 5. Volatilidade média
+vol_comparison = combine(groupby(df_portfolio, :Ticker),
+    :Volatility => (x -> mean(skipmissing(x))) => :AvgVolatility)
+top5_vol = first(sort(vol_comparison, :AvgVolatility, rev=true), 5)
+p5 = bar(top5_vol.Ticker, top5_vol.AvgVolatility,
+    title="Top 5 Volatilidade", xlabel="", ylabel="Vol %",
+    legend=false, titlefontsize=9, fillcolor=:purple, xrotation=45)
+
+# 6. Beta do mercado
+p6 = bar(beta_results.Ticker, beta_results.Beta,
+    title="Beta vs Mercado (SPY)", xlabel="", ylabel="Beta",
+    legend=false, titlefontsize=9, fillcolor=:teal, xrotation=45)
+hline!([1.0], color=:red, linestyle=:dash, linewidth=1.5)
+
+# Compor dashboard
+plot(p1, p2, p3, p4, p5, p6,
+    layout=(3, 2),
+    size=(1600, 1200),
+    plot_title="Dashboard EDA - Portfolio de Ações",
+    plot_titlefontsize=16)
+```
+
+---
+
+## 🐍 Python: Dashboard EDA Completo
+
+```{julia}
+#| echo: true
+#| eval: false
+
+python_eda = """
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# Carregar portfolio
+portfolio_stocks = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'JPM', 'BAC', 'XOM', 'SPY']
+df_portfolio = pd.DataFrame()
+
+for stock in portfolio_stocks:
+    try:
+        df_temp = pd.read_csv(f'yahoo-stock-market-data/{stock}.csv')
+        df_temp['Date'] = pd.to_datetime(df_temp['Date'])
+        df_temp = df_temp.sort_values('Date')
+        df_temp['Ticker'] = stock
+        df_temp['Return'] = np.concatenate([[0], np.diff(np.log(df_temp['Close'])) * 100])
+        df_temp['Volatility'] = df_temp['Return'].rolling(30).std()
+        df_portfolio = pd.concat([df_portfolio, df_temp], ignore_index=True)
+    except:
+        pass
+
+# Calcular métricas
+risk_return = df_portfolio.groupby('Ticker').agg({
+    'Return': [('AvgReturn', 'mean'), ('Risk', 'std')],
+}).reset_index()
+risk_return.columns = ['Ticker', 'AvgReturn', 'Risk']
+risk_return['SharpeRatio'] = risk_return['AvgReturn'] / risk_return['Risk']
+
+# Dashboard 6 painéis
+fig, axes = plt.subplots(3, 2, figsize=(16, 12))
+
+# 1. Distribuição
+returns_all = df_portfolio['Return'].dropna()
+axes[0, 0].hist(returns_all, bins=50, density=True, alpha=0.7)
+axes[0, 0].set_title('Distribuição Retornos')
+
+# 2. Top 5 Sharpe
+top5 = risk_return.nlargest(5, 'SharpeRatio')
+axes[0, 1].bar(top5['Ticker'], top5['SharpeRatio'], color='coral')
+axes[0, 1].set_title('Top 5 Sharpe Ratio')
+axes[0, 1].tick_params(axis='x', rotation=45)
+
+# 3. Risco vs Retorno
+axes[1, 0].scatter(risk_return['Risk'], risk_return['AvgReturn'], alpha=0.7)
+axes[1, 0].axhline(0, color='red', linestyle='--')
+axes[1, 0].set_title('Risco vs Retorno')
+axes[1, 0].set_xlabel('Risco')
+axes[1, 0].set_ylabel('Retorno')
+
+# 4. Evolução normalizada
+for ticker in ['AAPL', 'SPY', 'TSLA']:
+    df_t = df_portfolio[df_portfolio['Ticker'] == ticker].sort_values('Date')
+    base = df_t['Close'].iloc[0]
+    axes[1, 1].plot(df_t['Date'], (df_t['Close'] / base) * 100, label=ticker)
+axes[1, 1].set_title('Evolução Preços')
+axes[1, 1].legend()
+
+# 5. Volatilidade
+vol_comp = df_portfolio.groupby('Ticker')['Volatility'].mean().nlargest(5)
+axes[2, 0].bar(vol_comp.index, vol_comp.values, color='purple')
+axes[2, 0].set_title('Top 5 Volatilidade')
+axes[2, 0].tick_params(axis='x', rotation=45)
+
+# 6. Beta (simplificado)
+axes[2, 1].text(0.5, 0.5, 'Beta Calculation\\nRequires Individual\\nRegression Models', 
+                ha='center', va='center', fontsize=12)
+axes[2, 1].set_title('Beta vs Mercado')
+axes[2, 1].axis('off')
+
+plt.suptitle('Dashboard EDA - Portfolio de Ações', fontsize=16)
+plt.tight_layout()
+plt.savefig('dashboard_python_eda.png', dpi=300)
+plt.show()
+"""
+
+println(python_eda)
+```
+
+---
+
+## 📈 R: Dashboard EDA Completo
+
+```{julia}
+#| echo: true
+#| eval: false
+
+r_eda = """
+library(ggplot2)
+library(dplyr)
+library(patchwork)
+library(lubridate)
+
+# Carregar portfolio
+portfolio_stocks <- c('AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'JPM', 'BAC', 'XOM', 'SPY')
+df_portfolio <- data.frame()
+
+for (stock in portfolio_stocks) {
+  tryCatch({
+    df_temp <- read.csv(paste0('yahoo-stock-market-data/', stock, '.csv'))
+    df_temp\\$Date <- as.Date(df_temp\\$Date)
+    df_temp <- df_temp[order(df_temp\\$Date), ]
+    df_temp\\$Ticker <- stock
+    df_temp\\$Return <- c(0, diff(log(df_temp\\$Close)) * 100)
+    df_temp\\$Volatility <- zoo::rollapply(df_temp\\$Return, 30, sd, fill = NA, align = 'right')
+    df_portfolio <- rbind(df_portfolio, df_temp)
+  }, error = function(e) {})
+}
+
+# Calcular métricas
+risk_return <- df_portfolio %>%
+  group_by(Ticker) %>%
+  summarise(
+    AvgReturn = mean(Return, na.rm = TRUE),
+    Risk = sd(Return, na.rm = TRUE),
+    SharpeRatio = AvgReturn / Risk
+  )
+
+# 1. Distribuição
+p1 <- ggplot(df_portfolio, aes(x = Return)) +
+  geom_histogram(bins = 50, aes(y = ..density..), alpha = 0.7, fill = 'steelblue') +
+  labs(title = 'Distribuição Retornos') +
+  theme_minimal() +
+  theme(plot.title = element_text(size = 9))
+
+# 2. Top 5 Sharpe
+top5 <- risk_return %>% arrange(desc(SharpeRatio)) %>% head(5)
+p2 <- ggplot(top5, aes(x = reorder(Ticker, SharpeRatio), y = SharpeRatio)) +
+  geom_bar(stat = 'identity', fill = 'coral') +
+  labs(title = 'Top 5 Sharpe Ratio', x = '', y = '') +
+  theme_minimal() +
+  theme(plot.title = element_text(size = 9),
+        axis.text.x = element_text(angle = 45, hjust = 1))
+
+# 3. Risco vs Retorno
+p3 <- ggplot(risk_return, aes(x = Risk, y = AvgReturn)) +
+  geom_point(alpha = 0.7, size = 3) +
+  geom_hline(yintercept = 0, color = 'red', linetype = 'dashed') +
+  labs(title = 'Risco vs Retorno', x = 'Risco', y = 'Retorno') +
+  theme_minimal() +
+  theme(plot.title = element_text(size = 9))
+
+# 4. Evolução
+df_top3 <- df_portfolio %>% 
+  filter(Ticker %in% c('AAPL', 'SPY', 'TSLA')) %>%
+  group_by(Ticker) %>%
+  mutate(NormalizedPrice = (Close / first(Close)) * 100)
+
+p4 <- ggplot(df_top3, aes(x = Date, y = NormalizedPrice, color = Ticker)) +
+  geom_line(linewidth = 1) +
+  labs(title = 'Evolução Preços', x = '', y = '') +
+  theme_minimal() +
+  theme(plot.title = element_text(size = 9),
+        legend.position = c(0.1, 0.9))
+
+# 5. Volatilidade
+vol_comp <- df_portfolio %>%
+  group_by(Ticker) %>%
+  summarise(AvgVol = mean(Volatility, na.rm = TRUE)) %>%
+  arrange(desc(AvgVol)) %>%
+  head(5)
+
+p5 <- ggplot(vol_comp, aes(x = reorder(Ticker, AvgVol), y = AvgVol)) +
+  geom_bar(stat = 'identity', fill = 'purple') +
+  labs(title = 'Top 5 Volatilidade', x = '', y = 'Vol %') +
+  theme_minimal() +
+  theme(plot.title = element_text(size = 9),
+        axis.text.x = element_text(angle = 45, hjust = 1))
+
+# 6. Placeholder Beta
+p6 <- ggplot() +
+  annotate('text', x = 0.5, y = 0.5, 
+           label = 'Beta Calculation\\nRequires Individual\\nRegression Models',
+           size = 4) +
+  labs(title = 'Beta vs Mercado') +
+  theme_void() +
+  theme(plot.title = element_text(size = 9, hjust = 0.5))
+
+# Combinar
+dashboard <- (p1 | p2) / (p3 | p4) / (p5 | p6)
+dashboard <- dashboard + 
+  plot_annotation(title = 'Dashboard EDA - Portfolio de Ações',
+                  theme = theme(plot.title = element_text(size = 16, hjust = 0.5)))
+
+ggsave('dashboard_r_eda.png', dashboard, width = 16, height = 12, dpi = 300)
+"""
+
+println(r_eda)
+```
+
+---
+
+## 💡 INSIGHTS FINAIS
+
+```{julia}
+#| echo: true
+#| output: true
+
+using StatsBase
+
+println("="^80)
+println("=== INSIGHTS FINAIS DA ANÁLISE ===")
+println("="^80)
+
+println("\n📊 PRINCIPAIS DESCOBERTAS:\n")
+
+returns_all = filter(!isnan, df_portfolio.Return)
+returns_all = filter(!iszero, returns_all)
+
+println("1. DISTRIBUIÇÃO DE RETORNOS:")
+println("   - Assimetria: $(round(skewness(returns_all), digits=3))")
+println("   - Curtose: $(round(kurtosis(returns_all), digits=3))")
+println("   - Não-normalidade confirmada (caudas pesadas)")
+
+println("\n2. PERFIL RISCO-RETORNO:")
+best_sharpe = risk_return[argmax(risk_return.SharpeRatio), :]
+worst_sharpe = risk_return[argmin(risk_return.SharpeRatio), :]
+println("   - Melhor Sharpe: $(best_sharpe.Ticker) ($(round(best_sharpe.SharpeRatio, digits=3)))")
+println("   - Pior Sharpe: $(worst_sharpe.Ticker) ($(round(worst_sharpe.SharpeRatio, digits=3)))")
+
+println("\n3. CORRELAÇÕES:")
+println("   - Tech stocks altamente correlacionadas (>0.7)")
+println("   - SPY correlacionado com maioria (risco sistemático)")
+println("   - Diversificação entre setores reduz risco")
+
+println("\n4. BETA DO MERCADO:")
+best_beta = beta_results[argmax(beta_results.Beta), :]
+worst_beta = beta_results[argmin(beta_results.Beta), :]
+println("   - Maior Beta: $(best_beta.Ticker) ($(round(best_beta.Beta, digits=3)))")
+println("   - Menor Beta: $(worst_beta.Ticker) ($(round(worst_beta.Beta, digits=3)))")
+
+println("\n5. VOLATILIDADE:")
+most_vol = vol_comparison[argmax(vol_comparison.AvgVolatility), :]
+least_vol = vol_comparison[argmin(vol_comparison.AvgVolatility), :]
+println("   - Mais volátil: $(most_vol.Ticker) ($(round(most_vol.AvgVolatility, digits=3))%)")
+println("   - Menos volátil: $(least_vol.Ticker) ($(round(least_vol.AvgVolatility, digits=3))%)")
+
+println("\n" * "="^80)
+```
+
+---
+
+## 💡 RECOMENDAÇÕES
+
+::: {.incremental}
+**Para INVESTIDORES CONSERVADORES:**
+
+- Focar em ativos com Beta < 1.0
+- Priorizar SPY (índice) para diversificação
+- Evitar ativos de alta volatilidade
+
+**Para INVESTIDORES AGRESSIVOS:**
+
+- Considerar ativos com Beta > 1.0
+- Buscar Sharpe Ratio > 1.0
+- Monitorar volatilidade para timing
+
+**Para GESTORES DE PORTFOLIO:**
+
+- Diversificar entre setores (Tech, Finance, Energy)
+- Manter SPY como hedge
+- Rebalancear baseado em mudanças de volatilidade
+:::
+
+---
+
+## 📚 COMPARAÇÃO: Julia vs Python vs R
+
+```{julia}
+#| echo: true
+#| output: true
+
+comparison = DataFrame(
+    Critério = [
+        "Performance (Velocidade)",
+        "Facilidade - Básico",
+        "Facilidade - Avançado",
+        "Documentação",
+        "Comunidade",
+        "Integração Científica",
+        "Interatividade",
+        "Curva de Aprendizado",
+        "Melhor para"
+    ],
+    Julia = [
+        "⭐⭐⭐⭐⭐ (5/5)",
+        "⭐⭐⭐⭐ (4/5)",
+        "⭐⭐⭐ (3/5)",
+        "⭐⭐⭐ (3/5)",
+        "⭐⭐⭐ (3/5)",
+        "⭐⭐⭐⭐⭐ (5/5)",
+        "⭐⭐⭐⭐ (4/5)",
+        "Média",
+        "Computação intensiva, performance"
+    ],
+    Python = [
+        "⭐⭐⭐ (3/5)",
+        "⭐⭐⭐⭐⭐ (5/5)",
+        "⭐⭐⭐⭐ (4/5)",
+        "⭐⭐⭐⭐⭐ (5/5)",
+        "⭐⭐⭐⭐⭐ (5/5)",
+        "⭐⭐⭐⭐ (4/5)",
+        "⭐⭐⭐⭐⭐ (5/5)",
+        "Fácil",
+        "Prototipagem rápida, ML/DL"
+    ],
+    R = [
+        "⭐⭐ (2/5)",
+        "⭐⭐⭐ (3/5)",
+        "⭐⭐⭐⭐⭐ (5/5)",
+        "⭐⭐⭐⭐⭐ (5/5)",
+        "⭐⭐⭐⭐ (4/5)",
+        "⭐⭐⭐⭐⭐ (5/5)",
+        "⭐⭐⭐ (3/5)",
+        "Média-Alta",
+        "Estatística acadêmica, EDA"
+    ]
+)
+
+println(comparison)
+```
+
+---
+
+## ✅ CHECKLIST FINAL: Boas Práticas
+
+::: {.columns}
+::: {.column width="50%"}
+**ANTES DE VISUALIZAR:**
+
+✅ Entender o objetivo  
+✅ Conhecer o público-alvo  
+✅ Identificar tipo de variáveis  
+✅ Limpar dados  
+✅ Calcular estatísticas
+
+**ESCOLHA DO GRÁFICO:**
+
+✅ 1 quant → Histogram/Density  
+✅ 1 cat → Bar  
+✅ 2 quant → Scatter  
+✅ 1q+1c → Boxplot  
+✅ Temporal → Line  
+✅ Correlação → Heatmap
+:::
+
+::: {.column width="50%"}
+**DESIGN:**
+
+✅ Título descritivo  
+✅ Eixos com labels/unidades  
+✅ Cores com propósito  
+✅ Transparência adequada  
+✅ Tamanho legível (≥800px)  
+✅ Fonte ≥10pt  
+✅ Grid quando apropriado
+
+**ÉTICA:**
+
+✅ Eixos não manipulados  
+✅ Escalas honestas  
+✅ Citar fontes  
+✅ Transparência total
+:::
+:::
+
+---
+
+## 📖 RECURSOS RECOMENDADOS
+
+**Documentação:**
+
+- **Julia**: [Plots.jl](https://docs.juliaplots.org/), [StatsPlots.jl](https://github.com/JuliaPlots/StatsPlots.jl)
+- **Python**: [Seaborn](https://seaborn.pydata.org/), [Matplotlib](https://matplotlib.org/)
+- **R**: [ggplot2](https://ggplot2.tidyverse.org/), [tidyverse](https://www.tidyverse.org/)
+
+**Livros:**
+
+- *Fundamentals of Data Visualization* - Claus Wilke
+- *Storytelling with Data* - Cole Nussbaumer Knaflic
+- *The Visual Display of Quantitative Information* - Edward Tufte
+
+**Datasets:**
+
+- [Kaggle](https://www.kaggle.com/datasets) - Milhares de datasets reais
+- [UCI ML Repository](https://archive.ics.uci.edu/) - Dados para ML
+- [data.gov](https://data.gov/) - Dados governamentais abertos
+
+---
+
+## 🎯 PRÓXIMOS PASSOS
+
+::: {.incremental}
+1. **Praticar** com datasets reais do Kaggle
+2. **Explorar** visualizações interativas (Plotly, D3.js)
+3. **Aprender** dashboards (Pluto.jl, Streamlit, Shiny)
+4. **Estudar** visualização de redes e geoespacial
+5. **Aplicar** em projetos reais
+6. **Compartilhar** seus trabalhos!
+:::
+
+::: {.callout-tip}
+## Dica Final
+A melhor visualização é aquela que **comunica claramente** sua mensagem para o público-alvo. Simplicidade > Complexidade.
+:::
+
+---
+
+## 🙏 OBRIGADO!
+
+::: {.r-fit-text}
+**Perguntas?**
+:::
+
+::: {.callout-note}
+## Materiais
+
+- 📂 Código completo: GitHub
+- 📊 Datasets: Kaggle (links nos slides)
+- 📧 Contato: [seu-email]
+
+
+---
